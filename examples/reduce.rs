@@ -4,7 +4,7 @@ use rivi_loader::DebugOption;
 fn main() {
     let a = vec![1.0f32; 1024];
     let input = &vec![vec![a]];
-    let mut output = vec![0.0f32; 1];
+    let mut output = vec![0.0f32; 1024];
 
     let vk = rivi_loader::new(DebugOption::None).unwrap();
 

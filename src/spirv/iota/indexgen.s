@@ -104,9 +104,6 @@
 
     %main = OpFunction %void None %11
     %16 = OpLabel
-        %sgs = OpLoad %1 %SubgroupSize
-        %sgi = OpLoad %1 %SubgroupID
-        %sgli = OpLoad %1 %SubgroupLocalID
 
         ; invocation id ptr, "thread" id
         %52 = OpAccessChain %wg %invocation_id %uint_0

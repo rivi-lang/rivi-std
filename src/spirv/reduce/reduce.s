@@ -110,42 +110,61 @@
     %NonPrivatePointer = OpConstant %1 0x20
     %UniformMemory = OpConstant %1 0x40
 
-    %apply_signature = OpTypeFunction %bool %_ptr_Uniform_float
+    %apply_signature = OpTypeFunction %float %_ptr_Uniform_float
 
     %main = OpFunction %void None %11
     %16 = OpLabel
+        ; loop iterator variable
         %iter = OpVariable %_ptr_Function_uint Function
 
         %sgs_o = OpLoad %1 %SubgroupSize
         %sgli_o = OpLoad %1 %SubgroupLocalID
 
-        %iter_x = OpUDiv %1 %uint_64 %sgs_o
-        OpStore %iter %iter_x
-
         ; invocation id ptr, "thread" id
         %52 = OpAccessChain %wg %invocation_id %uint_0
         %53 = OpLoad %1 %52
 
-        ; assign an element from input vector to this thread
-        %60 = OpAccessChain %_ptr_Uniform_float %input %uint_0 %53
-        %node = OpFunctionCall %bool %apply %60
+        ; the following code is pseudocode for the following:
+        ;
+        ; reduce
+        ; define iter
+        ; match iter
+        ;   true => {
+        ;       sync
+        ;       reduce
+        ;       iter--
+        ;       continue
+        ;   },
+        ;   false => break
 
-        OpBranch %while_start
+        ; assign an element from input vector to this thread
+        %60 = OpAccessChain %_ptr_Uniform_float %input %uint_0 %53 ; nb: input array
+        %node = OpFunctionCall %float %apply %60
+
+        ; we iterate up to 64 (input size) / subgroup size
+        %iter_x = OpUDiv %1 %uint_64 %sgs_o
+        OpStore %iter %iter_x
+
+        OpBranch %while_start ; while
         %while_start = OpLabel
+        ; loop end == %endloop, loop continue == %continueloop
         OpLoopMerge %endloop %continueloop None
-        OpBranch %rankloop
+        OpBranch %rankloop ;
         %rankloop = OpLabel
-        %rloopload = OpLoad %1 %iter
-        %loopgate = OpUGreaterThan %bool %rloopload %uint_1
+            ; loop condition
+            ; loopgate is gt > 1 because we run reduce above once
+            %rloopload = OpLoad %1 %iter
+            %loopgate = OpUGreaterThan %bool %rloopload %uint_1
         OpBranchConditional %loopgate %start %endloop
         %start = OpLabel
 
-            %leader = OpIEqual %bool %sgli_o %uint_0
+            ; procedure sync start
+            %leader = OpIEqual %bool %sgli_o %uint_0 ; are we subgroup leader?
             OpSelectionMerge %leader_end None
             OpBranchConditional %leader %leader_t %leader_f
-            %leader_t = OpLabel ; if
+            %leader_t = OpLabel ; if true
 
-                %sync_ptr = OpAccessChain %_ptr_Uniform_float %out %uint_0 %53
+                %sync_ptr = OpAccessChain %_ptr_Uniform_float %out %uint_0 %53 ; nb: out array
                 %sync_val = OpLoad %float %sync_ptr
 
                 ; we need to figure out the index in the global memory registry
@@ -157,19 +176,28 @@
                 %sync_dest = OpAccessChain %_ptr_Uniform_float %out %uint_0 %dest
                 OpStore %sync_dest %sync_val
 
+                ; TODO: clear out the previous value after the move has happened
+                ; nb: has to ensure we are not the subgroup group 0 (e.g. the target sg)
+
                 OpBranch %leader_end
             %leader_f = OpLabel ; else
                 OpBranch %leader_end
             %leader_end = OpLabel ; end
-
+            ; procedure sync end
 
         OpBranch %continueloop
-        %continueloop = OpLabel
+        %continueloop = OpLabel ; continue block
 
+            ; since we use if above, we must block here
+            ; this is essentially a precondition to wait for syncing to end
             OpControlBarrier %uint_1 %uint_1 %UniformMemory
-            %70 = OpAccessChain %_ptr_Uniform_float %out %uint_0 %53
-            %node_inner = OpFunctionCall %bool %apply %70
 
+            ; now that we have shifted values from subgroups to the first one,
+            ; we must run one more reduction
+            %70 = OpAccessChain %_ptr_Uniform_float %out %uint_0 %53
+            %node_inner = OpFunctionCall %float %apply %70
+
+            ; finally, we have to progress out while condition
             %iterLoad = OpLoad %1 %iter
             %iterAdd = OpISub %1 %iterLoad %uint_1
             OpStore %iter %iterAdd
@@ -180,7 +208,7 @@
     OpReturn
     OpFunctionEnd
 
-    %apply = OpFunction %bool None %apply_signature
+    %apply = OpFunction %float None %apply_signature
     %63 = OpFunctionParameter %_ptr_Uniform_float
     %apply_label = OpLabel
 
@@ -198,13 +226,17 @@
         ; threads' value in register %63
         %sum = OpGroupNonUniformFAdd %float %uint_3 Reduce %63
 
-        %leader_ko = OpIEqual %bool %sgli %uint_0
-        %leader_uint = OpSelect %1 %leader_ko %uint_1 %uint_0
-        %leader_float = OpConvertUToF %float %leader_uint
-        %leader_val = OpFMul %float %sum %leader_float
+        ; in APL:
+        ; dim.x = (0 = B) x +/w
+        %leader_ko = OpIEqual %bool %sgli %uint_0 ; are we subgroup leader?
+        %leader_uint = OpSelect %1 %leader_ko %uint_1 %uint_0 ; if so, assign 1, else 0
+        %leader_float = OpConvertUToF %float %leader_uint ; conversion for mul
+        %leader_val = OpFMul %float %sum %leader_float ; then multiple subgroup result with the assign
+        ; effectively, if we are subgroup leader, we "keep" our value, otherwise we clear it as 0
 
+        ; then, we store this value to our dim.x location
         %sum_dest = OpAccessChain %_ptr_Uniform_float %out %uint_0 %inner_53
         OpStore %sum_dest %leader_val
 
-        OpReturnValue %true
+        OpReturnValue %sum
     OpFunctionEnd
