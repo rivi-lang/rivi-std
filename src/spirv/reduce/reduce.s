@@ -114,8 +114,17 @@
 
     %main = OpFunction %void None %11
     %16 = OpLabel
-        ; loop iterator variable
+
+        ; loop iterator variable, loaded from spec constant
+        ; this is defined first since variables have to be first things declared in spir-v
+        ;
+        ; Example:
+        ; up to 1024 values, we need two iterations:
+        ;   first iteration sums subgroups together
+        ;   second iteration sums synced values in first sg together
+        ; this information must come statically
         %iter = OpVariable %_ptr_Function_uint Function
+        OpStore %iter %spec_constant_1
 
         %sgs_o = OpLoad %1 %SubgroupSize
         %sgli_o = OpLoad %1 %SubgroupLocalID
@@ -140,12 +149,6 @@
         ; assign an element from input vector to this thread
         %60 = OpAccessChain %_ptr_Uniform_float %input %uint_0 %53 ; nb: input array
         %node = OpFunctionCall %float %apply %60
-
-        ; up to 1024 values, we need two iterations
-        ; first iteration sums subgroups together
-        ; second iteration sums synced values in first sg together
-        %iter_x = OpUDiv %1 %uint_64 %sgs_o
-        OpStore %iter %iter_x
 
         OpBranch %while_start ; while
         %while_start = OpLabel

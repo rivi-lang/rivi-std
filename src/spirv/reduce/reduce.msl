@@ -19,19 +19,18 @@ constant uint _12_tmp [[function_constant(0)]];
 constant uint _12 = is_function_constant_defined(_12_tmp) ? _12_tmp : 1u;
 
 static inline __attribute__((always_inline))
-float _57(device const float& _78, thread uint3& gl_GlobalInvocationID, thread uint& gl_SubgroupSize, thread uint& gl_SubgroupID, thread uint& gl_SubgroupInvocationID, device _9& v_6)
+float _57(device const float& _77, thread uint3& gl_GlobalInvocationID, thread uint& gl_SubgroupSize, thread uint& gl_SubgroupID, thread uint& gl_SubgroupInvocationID, device _9& v_6)
 {
-    float _85 = simd_sum(_78);
-    v_6._m0[gl_GlobalInvocationID.x] = _85 * float(uint(gl_SubgroupInvocationID == 0u));
-    return _85;
+    float _84 = simd_sum(_77);
+    v_6._m0[gl_GlobalInvocationID.x] = _84 * float(uint(gl_SubgroupInvocationID == 0u));
+    return _84;
 }
 
 kernel void main0(device _11& _7 [[buffer(0)]], device _9& v_6 [[buffer(1)]], uint gl_SubgroupSize [[thread_execution_width]], uint gl_SubgroupInvocationID [[thread_index_in_simdgroup]], uint gl_SubgroupID [[simdgroup_index_in_threadgroup]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
 {
     float _56 = _57(_7._m0[gl_GlobalInvocationID.x], gl_GlobalInvocationID, gl_SubgroupSize, gl_SubgroupID, gl_SubgroupInvocationID, v_6);
-    uint _58 = 64u / gl_SubgroupSize;
-    float _75;
-    for (uint _50 = _58; _50 > 1u; threadgroup_barrier(mem_flags::mem_device), _75 = _57(v_6._m0[gl_GlobalInvocationID.x], gl_GlobalInvocationID, gl_SubgroupSize, gl_SubgroupID, gl_SubgroupInvocationID, v_6), _50--)
+    float _74;
+    for (uint _50 = _12; _50 > 1u; threadgroup_barrier(mem_flags::mem_device), _74 = _57(v_6._m0[gl_GlobalInvocationID.x], gl_GlobalInvocationID, gl_SubgroupSize, gl_SubgroupID, gl_SubgroupInvocationID, v_6), _50--)
     {
         if (gl_SubgroupInvocationID == 0u)
         {
