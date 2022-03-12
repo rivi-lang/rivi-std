@@ -11,6 +11,7 @@ fn main() {
     let module = rivi_std::index_generator().unwrap();
     let shader = vk.load_shader(module, None).unwrap();
 
+
     vk.compute(input, &mut output, &shader).unwrap();
 
     println!("Result: {:?}", output);
