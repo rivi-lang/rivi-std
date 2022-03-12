@@ -141,7 +141,9 @@
         %60 = OpAccessChain %_ptr_Uniform_float %input %uint_0 %53 ; nb: input array
         %node = OpFunctionCall %float %apply %60
 
-        ; we iterate up to 64 (input size) / subgroup size
+        ; up to 1024 values, we need two iterations
+        ; first iteration sums subgroups together
+        ; second iteration sums synced values in first sg together
         %iter_x = OpUDiv %1 %uint_64 %sgs_o
         OpStore %iter %iter_x
 
