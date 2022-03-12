@@ -20,14 +20,14 @@
     OpExecutionMode %main LocalSize 1024 1 1
     OpDecorate %invocation_id BuiltIn GlobalInvocationId
 
-    OpDecorate %oa ArrayStride 4
+    OpDecorate %oa ArrayStride 16
     OpMemberDecorate %os 0 Offset 0
     OpDecorate %os Block
     OpDecorate %out DescriptorSet 0
     OpDecorate %out Binding 0
     OpDecorate %out Aliased
 
-    OpDecorate %lra ArrayStride 4
+    OpDecorate %lra ArrayStride 16
     OpMemberDecorate %lrs 0 Offset 0
     OpDecorate %lrs Block
     OpDecorate %input DescriptorSet 0
@@ -58,6 +58,7 @@
     %uint_1 = OpConstant %1 1
     %uint_2 = OpConstant %1 2
     %uint_3 = OpConstant %1 3
+    %uint_4 = OpConstant %1 4
     %uint_5 = OpConstant %1 5
     %uint_32 = OpConstant %1 32
     %uint_64 = OpConstant %1 64
@@ -79,20 +80,24 @@
     %invocation_id = OpVariable %wg_vec_p Input
     %wg = OpTypePointer Input %1
 
-    %lra = OpTypeArray %float %uint_64
+    %foo = OpTypeVector %float 4
+    %lra = OpTypeArray %foo %uint_64
     %lrs = OpTypeStruct %lra
     %lrsp = OpTypePointer StorageBuffer %lrs
     %input = OpVariable %lrsp StorageBuffer
 
-    %oa = OpTypeArray %float %uint_64
+    %oa = OpTypeArray %foo %uint_64
     %os = OpTypeStruct %oa
     %osp = OpTypePointer StorageBuffer %os
     %out = OpVariable %osp StorageBuffer
+
+    %vec4_float_zero = OpConstantComposite %foo %float_0 %float_0 %float_0 %float_0
 
 ; Pointer types
     %_ptr_Function_uint = OpTypePointer Function %1
     %_ptr_Uniform_uint = OpTypePointer StorageBuffer %1
     %_ptr_Uniform_float = OpTypePointer StorageBuffer %float
+    %_ptr_Uniform_vec4 = OpTypePointer StorageBuffer %foo
     %_ptr_Uniform_bool = OpTypePointer StorageBuffer %bool
     %_ptr_Function_float = OpTypePointer Function %float
 
@@ -110,7 +115,8 @@
     %NonPrivatePointer = OpConstant %1 0x20
     %UniformMemory = OpConstant %1 0x40
 
-    %apply_signature = OpTypeFunction %float %_ptr_Uniform_float
+    %apply_signature = OpTypeFunction %foo %_ptr_Uniform_vec4
+    %apply_signature_scalar = OpTypeFunction %float %_ptr_Uniform_float
 
     %main = OpFunction %void None %11
     %16 = OpLabel
@@ -147,8 +153,8 @@
         ;   false => break
 
         ; assign an element from input vector to this thread
-        %60 = OpAccessChain %_ptr_Uniform_float %input %uint_0 %53 ; nb: input array
-        %node = OpFunctionCall %float %apply %60
+        %60 = OpAccessChain %_ptr_Uniform_vec4 %input %uint_0 %53 ; nb: input array
+        %node = OpFunctionCall %foo %apply %60
 
         OpBranch %while_start ; while
         %while_start = OpLabel
@@ -169,8 +175,8 @@
             OpBranchConditional %leader %leader_t %leader_f
             %leader_t = OpLabel ; if true
 
-                %sync_ptr = OpAccessChain %_ptr_Uniform_float %out %uint_0 %53 ; nb: out array
-                %sync_val = OpLoad %float %sync_ptr
+                %sync_ptr = OpAccessChain %_ptr_Uniform_vec4 %out %uint_0 %53 ; nb: out array
+                %sync_val = OpLoad %foo %sync_ptr
 
                 ; we need to figure out the index in the global memory registry
                 ; to which we want to move the result. one way to figure this out
@@ -178,7 +184,7 @@
                 ; i.e., the 32nd thread will get an index of 1 (32 / 32), which
                 ; corresponds to the second memory slot in the global memory
                 %dest = OpUDiv %1 %53 %sgs_o
-                %sync_dest = OpAccessChain %_ptr_Uniform_float %out %uint_0 %dest
+                %sync_dest = OpAccessChain %_ptr_Uniform_vec4 %out %uint_0 %dest
                 OpStore %sync_dest %sync_val
 
                 ; TODO: clear out the previous value after the move has happened
@@ -199,8 +205,8 @@
 
             ; now that we have shifted values from subgroups to the first one,
             ; we must run one more reduction
-            %70 = OpAccessChain %_ptr_Uniform_float %out %uint_0 %53
-            %node_inner = OpFunctionCall %float %apply %70
+            %70 = OpAccessChain %_ptr_Uniform_vec4 %out %uint_0 %53
+            %node_inner = OpFunctionCall %foo %apply %70
 
             ; finally, we have to progress out while condition
             %iterLoad = OpLoad %1 %iter
@@ -210,11 +216,16 @@
         OpBranch %while_start
         %endloop = OpLabel
 
+        %vec_idx = OpUMod %1 %53 %uint_4
+        %array_idx = OpUDiv %1 %53 %uint_4
+        %scalar_sum_dest = OpAccessChain %_ptr_Uniform_float %out %uint_0 %array_idx %vec_idx
+        %sum_sg = OpFunctionCall %float %apply_scalar %scalar_sum_dest
+
     OpReturn
     OpFunctionEnd
 
-    %apply = OpFunction %float None %apply_signature
-    %63 = OpFunctionParameter %_ptr_Uniform_float
+    %apply = OpFunction %foo None %apply_signature
+    %63 = OpFunctionParameter %_ptr_Uniform_vec4
     %apply_label = OpLabel
 
         %sgs = OpLoad %1 %SubgroupSize
@@ -229,19 +240,56 @@
         ;
         ; each thread in a subgroup receives the sum of each
         ; threads' value in register %63
-        %sum = OpGroupNonUniformFAdd %float %uint_3 Reduce %63
+        %sum = OpGroupNonUniformFAdd %foo %uint_3 Reduce %63
 
         ; in APL:
         ; dim.x = (0 = B) x +/w
         %leader_ko = OpIEqual %bool %sgli %uint_0 ; are we subgroup leader?
         %leader_uint = OpSelect %1 %leader_ko %uint_1 %uint_0 ; if so, assign 1, else 0
         %leader_float = OpConvertUToF %float %leader_uint ; conversion for mul
-        %leader_val = OpFMul %float %sum %leader_float ; then multiple subgroup result with the assign
+        %leader_vec4 = OpCompositeConstruct %foo %leader_float %leader_float %leader_float %leader_float
+        %leader_val = OpFMul %foo %sum %leader_vec4 ; then multiple subgroup result with the assign
         ; effectively, if we are subgroup leader, we "keep" our value, otherwise we clear it as 0
 
         ; then, we store this value to our dim.x location
-        %sum_dest = OpAccessChain %_ptr_Uniform_float %out %uint_0 %inner_53
+        %sum_dest = OpAccessChain %_ptr_Uniform_vec4 %out %uint_0 %inner_53
         OpStore %sum_dest %leader_val
 
         OpReturnValue %sum
+    OpFunctionEnd
+
+    %apply_scalar = OpFunction %float None %apply_signature_scalar
+    %63_scalar = OpFunctionParameter %_ptr_Uniform_float
+    %apply_label_scalar = OpLabel
+
+        %sgs_scalar = OpLoad %1 %SubgroupSize
+        %sgi_scalar = OpLoad %1 %SubgroupID
+        %sgli_scalar = OpLoad %1 %SubgroupLocalID
+
+        ; invocation id ptr, "thread" id
+        %inner_52_scalar = OpAccessChain %wg %invocation_id %uint_0
+        %inner_53_scalar = OpLoad %1 %inner_52_scalar
+
+        ; subgroup (sometimes called "warp") reduce
+        ;
+        ; each thread in a subgroup receives the sum of each
+        ; threads' value in register %63
+        %sum_scalar = OpGroupNonUniformFAdd %float %uint_3 Reduce %63_scalar
+
+        ; in APL:
+        ; dim.x = (0 = B) x +/w
+        %leader_ko_scalar = OpIEqual %bool %sgli_scalar %uint_0 ; are we subgroup leader?
+        %leader_uint_scalar = OpSelect %1 %leader_ko_scalar %uint_1 %uint_0 ; if so, assign 1, else 0
+        %leader_float_scalar = OpConvertUToF %float %leader_uint_scalar ; conversion for mul
+        %leader_val_scalar = OpFMul %float %sum_scalar %leader_float_scalar ; then multiple subgroup result with the assign
+        ; effectively, if we are subgroup leader, we "keep" our value, otherwise we clear it as 0
+
+        %vec_idx_inner = OpUMod %1 %inner_53_scalar %uint_4
+        %array_idx_inner = OpUDiv %1 %inner_53_scalar %uint_4
+
+        ; then, we store this value to our dim.x location
+        %sum_dest_scalar = OpAccessChain %_ptr_Uniform_float %out %uint_0 %array_idx_inner %vec_idx_inner
+        OpStore %sum_dest_scalar %leader_val_scalar
+
+        OpReturnValue %sum_scalar
     OpFunctionEnd
