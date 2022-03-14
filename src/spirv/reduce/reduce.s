@@ -102,7 +102,6 @@
     %_ptr_Function_float = OpTypePointer Function %float
 
 ; Spec Const
-
     %spec_constant_1 = OpSpecConstant %1 1
 
 ; Some access flags
@@ -143,7 +142,7 @@
         ;
         ; reduce
         ; define iter
-        ; match iter
+        ; match iter > 1
         ;   true => {
         ;       sync
         ;       reduce
@@ -216,9 +215,13 @@
         OpBranch %while_start
         %endloop = OpLabel
 
-        %vec_idx = OpUMod %1 %53 %uint_4
-        %array_idx = OpUDiv %1 %53 %uint_4
+        ; we now have populated the first vector of the output array with values
+        ; finally, we need to reduce these four values into a single float
+        %vec_idx = OpUMod %1 %53 %uint_4 ; first we need the vector index {0..3}
+        %array_idx = OpUDiv %1 %53 %uint_4 ; and the array index { 0..31 }
+        ; then we assign a float value to each thread
         %scalar_sum_dest = OpAccessChain %_ptr_Uniform_float %out %uint_0 %array_idx %vec_idx
+        ; and call the scalar reduction
         %sum_sg = OpFunctionCall %float %apply_scalar %scalar_sum_dest
 
     OpReturn
