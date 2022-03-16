@@ -16,7 +16,7 @@
     OpCapability VulkanMemoryModel
 
     OpMemoryModel Logical Vulkan
-    OpEntryPoint GLCompute %main "main" %invocation_id %SubgroupSize %SubgroupID %SubgroupLocalID %out %input
+    OpEntryPoint GLCompute %main "main" %invocation_id %SubgroupSize %SubgroupID %SubgroupLocalID %push_constant_1 %out %input
     OpExecutionMode %main LocalSize 1024 1 1
     OpDecorate %invocation_id BuiltIn GlobalInvocationId
 
@@ -44,8 +44,6 @@
     OpDecorate %SubgroupID RelaxedPrecision
     OpDecorate %SubgroupID Flat
     OpDecorate %SubgroupID BuiltIn SubgroupId
-
-    OpDecorate %spec_constant_1 SpecId 0
 
 ; All types, variables, and constants
     %1 = OpTypeInt 32 0
@@ -100,9 +98,10 @@
     %_ptr_Uniform_vec4 = OpTypePointer StorageBuffer %foo
     %_ptr_Uniform_bool = OpTypePointer StorageBuffer %bool
     %_ptr_Function_float = OpTypePointer Function %float
+    %push_constant_1_ptr = OpTypePointer PushConstant %1
 
-; Spec Const
-    %spec_constant_1 = OpSpecConstant %1 1
+; Push Constants
+    %push_constant_1 = OpVariable %push_constant_1_ptr PushConstant
 
 ; Some access flags
     %none = OpConstant %1 0x0
@@ -129,7 +128,8 @@
         ;   second iteration sums synced values in first sg together
         ; this information must come statically
         %iter = OpVariable %_ptr_Function_uint Function
-        OpStore %iter %spec_constant_1
+        %push_constant = OpLoad %1 %push_constant_1
+        OpStore %iter %push_constant
 
         %sgs_o = OpLoad %1 %SubgroupSize
         %sgli_o = OpLoad %1 %SubgroupLocalID
