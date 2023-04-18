@@ -153,6 +153,7 @@
 
         ; assign an element from input vector to this thread
         %60 = OpAccessChain %_ptr_Uniform_vec4 %input %uint_0 %53 ; nb: input array
+
         %node = OpFunctionCall %foo %apply %60
 
         OpBranch %while_start ; while
@@ -281,7 +282,7 @@
 
         ; in APL:
         ; dim.x = (0 = B) x +/w
-        %leader_ko_scalar = OpIEqual %bool %sgli_scalar %uint_0 ; are we subgroup leader?
+        %leader_ko_scalar = OpIEqual %bool %inner_53_scalar %uint_0 ; are we subgroup leader?
         %leader_uint_scalar = OpSelect %1 %leader_ko_scalar %uint_1 %uint_0 ; if so, assign 1, else 0
         %leader_float_scalar = OpConvertUToF %float %leader_uint_scalar ; conversion for mul
         %leader_val_scalar = OpFMul %float %sum_scalar %leader_float_scalar ; then multiple subgroup result with the assign
