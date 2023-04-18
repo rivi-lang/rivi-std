@@ -1,8 +1,6 @@
-
 use rivi_loader::DebugOption;
 
 fn main() {
-
     let a = vec![1.0f32; 4096];
     let input = &vec![vec![a]];
     let mut output = vec![0.0f32; 1];

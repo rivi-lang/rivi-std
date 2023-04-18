@@ -1,4 +1,3 @@
-
 use rivi_loader::DebugOption;
 
 fn main() {
@@ -10,7 +9,6 @@ fn main() {
 
     let module = rivi_std::index_generator().unwrap();
     let shader = vk.load_shader(module, None).unwrap();
-
 
     vk.compute(input, &mut output, &shader).unwrap();
 

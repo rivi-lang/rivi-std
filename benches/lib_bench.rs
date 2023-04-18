@@ -31,7 +31,10 @@ fn gpu_reduce(n: usize) -> f32 {
     let now = Instant::now();
     vk.compute(input, &mut output, &shader).unwrap();
     let elapsed_time = now.elapsed();
-    println!("Running slow_function() took {} ms.", elapsed_time.as_millis());
+    println!(
+        "Running slow_function() took {} ms.",
+        elapsed_time.as_millis()
+    );
 
     *output.first().unwrap()
 }
@@ -42,9 +45,15 @@ fn cpu_reduce(n: usize) -> f32 {
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("indexgen 1024", |b| b.iter(|| index_generator(black_box(1024))));
-    c.bench_function("gpu reduce 1024", |b| b.iter(|| gpu_reduce(black_box(100_000_000))));
-    c.bench_function("cpu reduce 1024", |b| b.iter(|| cpu_reduce(black_box(100_000_000))));
+    c.bench_function("indexgen 1024", |b| {
+        b.iter(|| index_generator(black_box(1024)))
+    });
+    c.bench_function("gpu reduce 1024", |b| {
+        b.iter(|| gpu_reduce(black_box(100_000_000)))
+    });
+    c.bench_function("cpu reduce 1024", |b| {
+        b.iter(|| cpu_reduce(black_box(100_000_000)))
+    });
 }
 
 criterion_group!(benches, criterion_benchmark);
